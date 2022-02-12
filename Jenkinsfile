@@ -1,11 +1,17 @@
 pipeline {
   agent any
   stages {
+     stage("Clone") {
+         steps {
+            checkout([$class: 'GitSCM', branches: [[name: '*/master']], 
+            extensions: [], 
+            userRemoteConfigs: [[url: 'https://github.com/vbalabin/jenkins_test']]])   	   
+         }
+      }
      stage("Build image") {
         steps {
     	catchError {
       	   script {
-                sh 'cp -rp /home/projects/sdet_practicum_20oct/* .'
         	    docker.build("python-web-tests", "-f Dockerfile .")
       	     }
           }
