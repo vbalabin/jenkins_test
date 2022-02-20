@@ -1,3 +1,4 @@
+Error on Purpose
 pipeline {
   agent any
   stages {
