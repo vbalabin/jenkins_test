@@ -1,42 +1,42 @@
 pipeline {
     agent any
     stages {
-        stage("Build image") {
+        stage("Ping") {
             steps {
                 catchError {
                     script {
-                        sh 'cp -rp /home/projects/sdet_practicum_20oct/* .'
+                        sh 'curl http://selenoid:4444/status'
+
+                    }
+                }
+            }
+        }          
+        stage("Copy") {
+            steps {
+                catchError {
+                    script {
+                        sh 'cp -rp /home/projects/sdet_selenoid/* .'
                         docker.build("python-web-tests", "-f Dockerfile .")
-                         stash name:'scm', includes:'**'
                     }
                 }
             }
         }
-        stage('Run tests') {
-            steps {
-                catchError {
-                    script {
-                        docker.image('aerokube/selenoid:1.10.4').withRun('-p 4444:4444 -v /run/docker.sock:/var/run/docker.sock -v $PWD:/etc/selenoid/',
-                    '-timeout 600s -limit 2') { c ->
-                            docker.image('python-web-tests').inside("--link ${c.id}:selenoid") {
-                                    unstash 'scm'
-                                    sh "pytest ${CMD_PARAMS}"
-                            }
-                        }
-                    }
+        stage('Run tests E') {
+            agent {
+                docker {
+                    image 'python-web-tests'
+                    args '--network host'
                 }
             }
-        }
-        stage('Reports') {
             steps {
-                allure([
-                includeProperties: false,
-                jdk: '',
-                properties: [],
-                reportBuildPolicy: 'ALWAYS',
-                results: [[path: 'report']]
-                ])
+                sh '''
+                    cd /app
+                    ls
+                '''
             }
         }
     }
 }
+
+
+stash name:'scm', includes:'**'
