@@ -1,0 +1,98 @@
+version: '3'
+
+services:
+  docker:
+    container_name: selenoid-docker
+    image: docker:dind
+    privileged: true
+    environment:
+      - DOCKER_TLS_CERTDIR=/certs
+    restart: unless-stopped   
+    volumes:       
+      - docker-certs:/certs/client
+      - jenkins-data:/root"
+      - lib-docker:/var/lib/docker
+    ports:
+      - "3000:3000"
+      - "2376:2376"          
+    command: --storage-driver overlay2
+    networks: 
+      - jenkins
+
+  selenoid:
+    depends_on:
+      - docker  
+    container_name: selenoid
+    image: aerokube/selenoid:1.10.7
+    restart: unless-stopped
+    volumes:
+      - "./config:/etc/selenoid"
+      - "./video:/opt/selenoid/video"
+      - "./logs:/opt/selenoid/logs"
+      - selenoid-data:/root
+      - docker-certs:/certs/client:ro
+    environment:
+      - DOCKER_HOST=tcp://docker:2376
+      - DOCKER_CERT_PATH=/certs/client
+      - DOCKER_TLS_VERIFY=1 
+      - OVERRIDE_VIDEO_OUTPUT_DIR=/path/to/config/video
+      - OVERRIDE_HOME=selenoid-data
+    command: ["-conf", "/etc/selenoid/browsers.json", "-video-output-dir", "/opt/selenoid/video", "-log-output-dir", "/opt/selenoid/logs"]
+    ports:
+      - "4444:4444"
+    networks:
+      - jenkins  
+
+  selenoid-ui:
+    container_name: selenoid-ui
+    image: aerokube/selenoid-ui
+    command: --selenoid-uri http://selenoid:4444
+    depends_on:
+      - selenoid  
+    ports:
+      - "8088:8080"
+    networks: 
+      - jenkins   
+
+  jenkins:
+    container_name: jenkins-blueocean
+    image: myjenkins-blueocean:2.319.2-1
+    privileged: true
+    depends_on:
+      - selenoid    
+    environment:
+      - DOCKER_HOST=tcp://docker:2376
+      - DOCKER_CERT_PATH=/certs/client
+      - DOCKER_TLS_VERIFY=1 
+    ports:
+    - "9090:8080"
+    - "50000:50000"
+    volumes:
+      - jenkins-data:/var/jenkins_home
+      - docker-certs:/certs/client:ro
+      - $HOME:/home
+    networks: 
+      - jenkins
+
+  # sdet:
+  #   container_name: sdet-py
+  #   build:
+  #     context: ./project
+  #     dockerfile: Dockerfile
+  #   depends_on:
+  #     - selenoid-ui
+  #   volumes:
+  #       - "./project:/wd"
+  #   networks: 
+  #     - jenkins
+  #   command: pytest --alluredir=./allure-results ./tests
+
+networks:
+  jenkins:
+    external: true
+
+volumes:
+  jenkins-data:
+  selenoid-data:
+  docker-certs:
+  lib-docker:
