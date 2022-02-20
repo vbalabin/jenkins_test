@@ -1,3 +1,4 @@
+error on purpose
 pipeline {
   agent any
   stages {
