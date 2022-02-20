@@ -1,42 +1,45 @@
 pipeline {
-    agent any
-    stages {
-        stage("Ping") {
-            steps {
-                catchError {
-                    script {
-                        sh 'curl http://selenoid:4444/status'
-
-                    }
-                }
-            }
-        }          
-        stage("Copy") {
-            steps {
-                catchError {
-                    script {
-                        sh 'cp -rp /home/projects/sdet_selenoid/* .'
-                        docker.build("python-web-tests", "-f Dockerfile .")
-                    }
-                }
-            }
+  agent any
+  stages {
+    stage("Clone") {
+      steps {
+        checkout([$class: 'GitSCM', branches: [[name: '*/master']], 
+        extensions: [], 
+        userRemoteConfigs: [[url: 'https://github.com/vbalabin/jenkins_test']]])   	   
+      }
+    }
+    stage("Build image") {
+      steps {
+        catchError {
+          script {
+            docker.build("python-web-tests", "-f Dockerfile .")
+          }
         }
-        stage('Run tests E') {
-            agent {
-                docker {
-                    image 'python-web-tests'
-                    args '--network host'
-                }
-            }
-            steps {
-                sh '''
-                    cd /app
-                    ls
-                '''
-            }
+        stash name:'all', includes:'**'
+      }
+    }
+    stage('Run tests') {
+      agent {
+        docker {
+            image 'python-web-tests'
+            args '--network host'
+        }
+      }
+      steps {
+        unstash 'all'
+        sh '''
+          pytest --disable-pytest-warnings --alluredir=target/allure-results ./tests
+        '''
+        sh 'pwd'
+        sh 'ls'
+        stash name:'results', includes:'**'
+      }
+    }
+    stage('Build report'){
+        steps{
+          unstash 'results'
+          allure includeProperties: false, jdk: '', results: [[path: 'target/allure-results']]
         }
     }
+  }
 }
-
-
-stash name:'scm', includes:'**'

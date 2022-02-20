@@ -1,55 +1,45 @@
 pipeline {
   agent any
   stages {
-     stage("Clone") {
-         steps {
-            checkout([$class: 'GitSCM', branches: [[name: '*/master']], 
-            extensions: [], 
-            userRemoteConfigs: [[url: 'https://github.com/vbalabin/jenkins_test']]])   	   
-         }
+    stage("Clone") {
+      steps {
+        checkout([$class: 'GitSCM', branches: [[name: '*/master']], 
+        extensions: [], 
+        userRemoteConfigs: [[url: 'https://github.com/vbalabin/jenkins_test']]])   	   
       }
-     stage("Build image") {
-        steps {
-    	catchError {
-      	   script {
-        	    docker.build("python-web-tests", "-f Dockerfile .")
-      	     }
-          }
-       }
     }
-     stage('Pull browser') {
-        steps {
-           catchError {
-              script {
-      	    docker.image('selenoid/chrome:92.0')
-      	      }
-           }
+    stage("Build image") {
+      steps {
+        catchError {
+          script {
+            docker.build("python-web-tests", "-f Dockerfile .")
+          }
         }
-     }
-     stage('Run tests') {
-        steps {
-           catchError {
-              script {
-          	     docker.image('aerokube/selenoid:1.10.4').withRun('-p 4444:4444 -v /run/docker.sock:/var/run/docker.sock -v $PWD:/etc/selenoid/',
-            	'-timeout 600s -limit 2') { c ->
-              	docker.image('python-web-tests').inside("--link ${c.id}:selenoid") {
-                    	sh "pytest ${CMD_PARAMS}"
-                	    }
-                   }
-        	     }
-      	    }
-         }
-     }
-     stage('Reports') {
-        steps {
-           allure([
-      	   includeProperties: false,
-      	   jdk: '',
-      	   properties: [],
-      	   reportBuildPolicy: 'ALWAYS',
-      	   results: [[path: 'report']]
-    	   ])
-  	        }
-         }
-     }
+        stash name:'all', includes:'**'
+      }
+    }
+    stage('Run tests') {
+      agent {
+        docker {
+            image 'python-web-tests'
+            args '--network host'
+        }
+      }
+      steps {
+        unstash 'all'
+        sh '''
+          pytest --disable-pytest-warnings --alluredir=target/allure-results ./tests
+        '''
+        sh 'pwd'
+        sh 'ls'
+        stash name:'results', includes:'**'
+      }
+    }
+    stage('Build report'){
+        steps{
+          unstash 'results'
+          allure includeProperties: false, jdk: '', results: [[path: 'target/allure-results']]
+        }
+    }
+  }
 }
